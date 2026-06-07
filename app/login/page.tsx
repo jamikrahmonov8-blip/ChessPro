@@ -2,7 +2,8 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { createClient } from '@/utils/supabase/client';
+import { auth } from '@/utils/firebase';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 import { motion } from 'framer-motion';
 import {
   Mail,
@@ -16,7 +17,6 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const supabase = createClient();
 
   // Form state
   const [formData, setFormData] = useState({
@@ -54,19 +54,12 @@ export default function LoginPage() {
         throw new Error('Пароль не может быть пустым');
       }
 
-      // Login with Supabase
-      const { data, error: signInError } = await supabase.auth.signInWithPassword({
-        email: formData.email.trim(),
-        password: formData.password,
-      });
-
-      if (signInError) {
-        throw new Error(signInError.message);
-      }
-
-      if (!data.user) {
-        throw new Error('Ошибка при входе в аккаунт');
-      }
+      // Login with Firebase Auth
+      await signInWithEmailAndPassword(
+        auth,
+        formData.email.trim(),
+        formData.password
+      );
 
       setSuccess(true);
 
@@ -75,7 +68,25 @@ export default function LoginPage() {
         router.push('/dashboard');
       }, 1500);
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Произошла ошибка';
+      let errorMessage = 'Произошла ошибка';
+      
+      if (err instanceof Error) {
+        errorMessage = err.message;
+        
+        // Handle Firebase specific errors
+        if (err.message.includes('user-not-found')) {
+          errorMessage = 'Пользователь с таким email не найден';
+        } else if (err.message.includes('wrong-password')) {
+          errorMessage = 'Неправильный пароль';
+        } else if (err.message.includes('invalid-email')) {
+          errorMessage = 'Некорректный email адрес';
+        } else if (err.message.includes('user-disabled')) {
+          errorMessage = 'Этот аккаунт был отключен';
+        } else if (err.message.includes('too-many-requests')) {
+          errorMessage = 'Слишком много попыток входа. Попробуйте позже';
+        }
+      }
+      
       setError(errorMessage);
     } finally {
       setIsLoading(false);
