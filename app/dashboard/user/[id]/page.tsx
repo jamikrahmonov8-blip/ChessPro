@@ -47,7 +47,7 @@ export default function UserProfilePage() {
   }, [targetUid, currentUser]);
 
   const handleFriendshipToggle = async () => {
-    if (!currentUser || !targetUid || !targetUser) return;
+    if (!currentUser || !targetUid || !targetUser || !db) return;
 
     const requestRef = doc(db, 'profiles', targetUid, 'friend_requests', currentUser.uid);
     const friendRef = doc(db, 'profiles', currentUser.uid, 'friends', targetUid);

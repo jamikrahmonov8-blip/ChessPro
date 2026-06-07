@@ -55,7 +55,7 @@ export default function FriendsPage() {
 
   // 👍 ОДОБРЕНИЕ ЗАПРОСА В ДРУЗЬЯ
   const acceptFriendRequest = async (request: any) => {
-    if (!currentUser) return;
+    if (!currentUser || !db) return;
 
     try {
       // Получаем профиль текущего юзера, чтобы записать его данные собеседнику
@@ -86,13 +86,13 @@ export default function FriendsPage() {
 
   // 👎 ОТКЛОНЕНИЕ ЗАПРОСА В ДРУЗЬЯ
   const declineFriendRequest = async (requestId: string) => {
-    if (!currentUser) return;
+    if (!currentUser || !db) return;
     await deleteDoc(doc(db, 'profiles', currentUser.uid, 'friend_requests', requestId));
   };
 
   // Вызов на дуэль
   const sendGameInvite = async (seconds: number) => {
-    if (!currentUser || !selectedFriend) return;
+    if (!currentUser || !selectedFriend || !db) return;
 
     const inviteId = `invite_${currentUser.uid}_${Date.now()}`;
     await setDoc(doc(db, 'invites', inviteId), {

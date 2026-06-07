@@ -65,7 +65,7 @@ export default function SearchPage() {
 
   // Быстрое добавление в друзья прямо из поиска
   const handleActionFriend = async (user: any) => {
-    if (!currentUser) return;
+    if (!currentUser || !db) return;
 
     const requestRef = doc(db, 'profiles', user.id, 'friend_requests', currentUser.uid);
     const friendRef = doc(db, 'profiles', currentUser.uid, 'friends', user.id);

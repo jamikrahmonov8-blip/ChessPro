@@ -75,7 +75,7 @@ export default function MessagesPage() {
   // 3. Отправка сообщения
   const handleSendMessage = async (textToSend?: string) => {
     const messageContent = textToSend || newMessage.trim();
-    if (!messageContent || !currentUser || !targetUid || !targetUser) return;
+    if (!messageContent || !currentUser || !targetUid || !targetUser || !db) return;
 
     const nowISO = new Date().toISOString();
     
