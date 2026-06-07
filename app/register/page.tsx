@@ -78,7 +78,7 @@ export default function RegisterPage() {
               <label className="text-xs text-slate-400 font-semibold">Имя пользователя</label>
               <div className="relative">
                 <User className="absolute left-4 top-3.5 text-slate-500" size={16} />
-                <input type="text" placeholder="Jamik"尊 required value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl pl-11 pr-4 py-3 text-sm transition-colors outline-none text-white font-medium" />
+                <input type="text" placeholder="Jamik" required value={username} onChange={e => setUsername(e.target.value)} className="w-full bg-slate-950 border border-slate-800 focus:border-emerald-500 rounded-xl pl-11 pr-4 py-3 text-sm transition-colors outline-none text-white font-medium" />
               </div>
             </div>
             <div className="space-y-1">
