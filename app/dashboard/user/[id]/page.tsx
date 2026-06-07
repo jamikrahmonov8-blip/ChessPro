@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { auth, db } from '@/utils/firebase';
-import { doc, getDoc, setDoc, deleteDoc, collection, query, where, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, deleteDoc, collection, onSnapshot, getDocs, query, where } from 'firebase/firestore';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Trophy, ChevronLeft, UserPlus, UserMinus, MessageSquare, 
-  Award, CheckCircle2, Zap, Flame, Clock, Target, Calendar, Users, History 
+  Award, CheckCircle2, Zap, Flame, Clock, Target, Calendar, Users, History, Loader2 
 } from 'lucide-react';
 
 export default function UserProfilePage() {
@@ -16,12 +16,12 @@ export default function UserProfilePage() {
   const targetUid = params.id as string;
 
   const [targetUser, setTargetUser] = useState<any>(null);
-  const [isFriend, setIsFriend] = useState<any>('none'); // 'none', 'pending', 'friends'
+  const [isFriend, setIsFriend] = useState<any>('none'); // 'none', 'friends'
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'overview' | 'matches' | 'friends'>('overview');
   const [uiFeedback, setUiFeedback] = useState<string | null>(null);
   
-  // Дополнительные данные для вкладок
+  // Состояния данных для вкладок
   const [userFriends, setUserFriends] = useState<any[]>([]);
   const [matchHistory, setMatchHistory] = useState<any[]>([]);
 
@@ -30,28 +30,37 @@ export default function UserProfilePage() {
   useEffect(() => {
     if (!targetUid || !currentUser) return;
 
+    let unsubscribeTargetUser: () => void;
+
     const fetchFullProfileData = async () => {
       try {
-        // Запрос основного профиля целевого игрока
-        const userDoc = await getDoc(doc(db, 'profiles', targetUid));
-        if (userDoc.exists()) setTargetUser(userDoc.data());
+        // 1. Реалтайм-стрим профиля целевого игрока (для отслеживания статуса онлайн/офлайн)
+        unsubscribeTargetUser = onSnapshot(doc(db, 'profiles', targetUid), (docSnap) => {
+          if (docSnap.exists()) setTargetUser(docSnap.data());
+        });
 
-        // Проверка статуса дружбы
+        // 2. Проверка статуса дружбы в подколлекции 'friends'
         const friendDoc = await getDoc(doc(db, 'profiles', currentUser.uid, 'friends', targetUid));
-        const requestDoc = await getDoc(doc(db, 'profiles', targetUid, 'friend_requests', currentUser.uid));
+        if (friendDoc.exists()) {
+          setIsFriend('friends');
+        } else {
+          setIsFriend('none');
+        }
 
-        if (friendDoc.exists()) setIsFriend('friends');
-        else if (requestDoc.exists()) setIsFriend('pending');
-        else setIsFriend('none');
-
-        // Подгрузка друзей целевого пользователя
-        const friendsQuery = query(collection(db, 'profiles'), where('friends', 'array-contains', targetUid));
-        const friendsSnap = await getDocs(friendsQuery);
+        // 3. Подгрузка списка друзей из подколлекции 'friends' целевого юзера
+        const friendsCollectionRef = collection(db, 'profiles', targetUid, 'friends');
+        const friendsSnap = await getDocs(friendsCollectionRef);
         const fList: any[] = [];
-        friendsSnap.forEach(d => fList.push({ id: d.id, ...d.data() }));
+
+        for (const friendDoc of friendsSnap.docs) {
+          const fProfileSnap = await getDoc(doc(db, 'profiles', friendDoc.id));
+          if (fProfileSnap.exists()) {
+            fList.push({ id: fProfileSnap.id, ...fProfileSnap.data() });
+          }
+        }
         setUserFriends(fList);
 
-        // Подгрузка матчей
+        // 4. Подгрузка истории сыгранных матчей
         const matchesQuery = query(collection(db, 'matches'), where('players', 'array-contains', targetUid));
         const matchesSnap = await getDocs(matchesQuery);
         const mList: any[] = [];
@@ -59,40 +68,69 @@ export default function UserProfilePage() {
         setMatchHistory(mList);
 
       } catch (err) {
-        console.error(err);
+        console.error("Ошибка при получении данных профиля:", err);
       } finally {
         setLoading(false);
       }
     };
 
     fetchFullProfileData();
+
+    return () => {
+      if (unsubscribeTargetUser) unsubscribeTargetUser();
+    };
   }, [targetUid, currentUser]);
 
+  // 👥 МГНОВЕННОЕ ДОБАВЛЕНИЕ / УДАЛЕНИЕ ИЗ ДРУЗЕЙ (МГНОВЕННЫЙ ЗАПРОС)
   const handleFriendshipToggle = async () => {
     if (!currentUser || !targetUid || !targetUser || !db) return;
 
-    const requestRef = doc(db, 'profiles', targetUid, 'friend_requests', currentUser.uid);
-    const friendRef = doc(db, 'profiles', currentUser.uid, 'friends', targetUid);
+    const myFriendRef = doc(db, 'profiles', currentUser.uid, 'friends', targetUid);
+    const targetFriendRef = doc(db, 'profiles', targetUid, 'friends', currentUser.uid);
 
-    if (isFriend === 'friends') {
-      await deleteDoc(friendRef);
-      await deleteDoc(doc(db, 'profiles', targetUid, 'friends', currentUser.uid));
-      setIsFriend('none');
-      triggerFeedback('Связь разорвана. Удален из друзей.');
-    } else if (isFriend === 'none') {
-      const myProfileSnap = await getDoc(doc(db, 'profiles', currentUser.uid));
-      const myUsername = myProfileSnap.exists() ? myProfileSnap.data().username : 'Игрок';
-      const myRating = myProfileSnap.exists() ? myProfileSnap.data().rating || 1200 : 1200;
+    try {
+      if (isFriend === 'friends') {
+        // Удаляем из друзей у обоих игроков
+        await deleteDoc(myFriendRef);
+        await deleteDoc(targetFriendRef);
+        
+        setIsFriend('none');
+        triggerFeedback('Удален из списка друзей.');
+        
+        // Локально убираем из массива, чтобы вкладка перерисовывалась мгновенно
+        setUserFriends(prev => prev.filter(f => f.id !== targetUid));
+      } else {
+        // Добавляем друг друга в подколлекции напрямую (Взаимная подписка)
+        const myProfileSnap = await getDoc(doc(db, 'profiles', currentUser.uid));
+        const myData = myProfileSnap.exists() ? myProfileSnap.data() : {};
 
-      await setDoc(requestRef, {
-        id: currentUser.uid,
-        username: myUsername,
-        rating: myRating,
-        sentAt: new Date().toISOString()
-      });
-      
-      setIsFriend('pending');
-      triggerFeedback('Запрос в друзья отправлен!');
+        // Пишем целевого игрока к нам в друзья
+        await setDoc(myFriendRef, {
+          id: targetUid,
+          username: targetUser.username,
+          rating: targetUser.rating || 1200,
+          photoURL: targetUser.photoURL || '',
+          addedAt: new Date().toISOString()
+        });
+
+        // Пишем нас к целевому игроку в друзья
+        await setDoc(targetFriendRef, {
+          id: currentUser.uid,
+          username: myData.username || 'Игрок',
+          rating: myData.rating || 1200,
+          photoURL: myData.photoURL || '',
+          addedAt: new Date().toISOString()
+        });
+
+        setIsFriend('friends');
+        triggerFeedback('Добавлен в список друзей! 🎉');
+
+        // Локально добавляем в массив для живого апдейта вкладки
+        setUserFriends(prev => [...prev, { id: targetUid, ...targetUser }]);
+      }
+    } catch (error) {
+      console.error(error);
+      triggerFeedback('Ошибка обновления статуса.');
     }
   };
 
@@ -101,19 +139,25 @@ export default function UserProfilePage() {
     setTimeout(() => setUiFeedback(null), 3500);
   };
 
-  if (loading) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-white font-black tracking-wide">СИНХРОНИЗАЦИЯ ПРОФИЛЯ...</div>;
+  if (loading) return (
+    <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center text-white gap-4">
+      <Loader2 className="w-10 h-10 text-emerald-500 animate-spin" />
+      <p className="text-xs font-black uppercase tracking-widest text-slate-500">Синхронизация профиля...</p>
+    </div>
+  );
+  
   if (!targetUser) return <div className="min-h-screen bg-slate-950 flex items-center justify-center text-red-400 font-bold">Игрок не найден на сервере.</div>;
 
   return (
-    <main className="min-h-screen  text-white relative font-sans">
+    <main className="min-h-screen text-white relative font-sans">
       
-      {/* 🌌 КИБЕРСПОРТИВНЫЙ БАННЕР-ЗАДНИК */}
-      <div className="absolute top-0 left-0 right-0 h-80 bg-[url('/img/chess_bg_profile.jpg')] bg-cover bg-center opacity-15 filter blur-sm pointer-events-none" />
-      <div className="absolute top-0 left-0 right-0 h-80 bg-gradient-to-b from-transparent  pointer-events-none" />
+      {/* 🌌 КИБЕРСПОРТИВНЫЙ ЗАДНИК */}
+      <div className="absolute top-0 left-0 right-0 h-80 bg-gradient-to-br pointer-events-none" />
+      <div className="absolute top-0 left-0 right-0 h-80 bg-gradient-to-b from-transparent pointer-events-none" />
 
       <div className="max-w-5xl mx-auto px-6 pt-12 pb-24 relative z-10 space-y-8">
         
-        {/* Кнопка возврата */}
+        {/* Назад к поиску */}
         <button 
           onClick={() => router.push('/dashboard/search')}
           className="flex items-center gap-1.5 text-xs font-black uppercase tracking-wider text-slate-400 hover:text-emerald-400 transition-colors"
@@ -121,28 +165,18 @@ export default function UserProfilePage() {
           <ChevronLeft size={14} /> Назад к поиску
         </button>
 
-        {/* 👤 КАРТОЧКА СУПЕР-ПРОФИЛЯ (Верхняя панель) */}
+        {/* 👤 КАРТОЧКА СУПЕР-ПРОФИЛЯ */}
         <div className="flex flex-col md:flex-row items-center md:items-end justify-between gap-6 bg-slate-900/20 border border-slate-900 p-8 rounded-3xl backdrop-blur-2xl shadow-2xl">
           <div className="flex flex-col md:flex-row items-center gap-6 text-center md:text-left">
             
-            {/* Аватарка + Живой неоновый "Червячок" статуса */}
+            {/* Аватарка (Base64) + Живой "Червячок" статуса */}
             <div className="w-24 h-24 rounded-2xl bg-gradient-to-br from-slate-800 to-slate-900 border-2 border-slate-700/50 flex items-center justify-center text-slate-200 font-black text-4xl uppercase relative shadow-xl overflow-hidden shrink-0">
               {targetUser.photoURL ? (
-                <img 
-                  src={targetUser.photoURL} 
-                  alt={`${targetUser.username}'s avatar`} 
-                  className="w-full h-full object-cover"
-                />
+                <img src={targetUser.photoURL} alt={targetUser.username} className="w-full h-full object-cover" />
               ) : (
                 targetUser.username?.[0]
               )}
-              
-              {/* Пульсирующий неоновый индикатор онлайна (Червячок) */}
-              <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-3 border-slate-950 z-10 ${
-                targetUser.isOnline 
-                  ? 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50' 
-                  : 'bg-slate-600'
-              }`} />
+              <span className={`absolute -bottom-1 -right-1 w-4 h-4 rounded-full border-3 border-slate-950 z-10 ${targetUser.isOnline ? 'bg-emerald-500 animate-pulse shadow-lg shadow-emerald-500/50' : 'bg-slate-600'}`} />
             </div>
 
             <div className="space-y-1.5">
@@ -164,20 +198,19 @@ export default function UserProfilePage() {
             </div>
           </div>
 
-          {/* Панель взаимодействий */}
+          {/* Панель главного управления под аватаркой */}
           {currentUser?.uid !== targetUid && (
             <div className="flex items-center gap-3 w-full md:w-auto shrink-0">
               <button 
                 onClick={handleFriendshipToggle}
-                disabled={isFriend === 'pending'}
                 className={`flex-1 md:flex-none px-5 py-3 rounded-xl text-xs font-black tracking-wide transition-all border flex items-center justify-center gap-2 ${
-                  isFriend === 'friends' ? 'bg-slate-950/60 border-slate-800 text-red-400 hover:bg-red-500/5' :
-                  isFriend === 'pending' ? 'bg-slate-950 text-slate-500 border-slate-900 cursor-not-allowed' :
-                  'bg-emerald-500 hover:bg-emerald-600 text-slate-950 border-transparent shadow-lg shadow-emerald-500/10'
+                  isFriend === 'friends' 
+                    ? 'bg-slate-950/60 border-slate-800 text-red-400 hover:bg-red-500/5' 
+                    : 'bg-emerald-500 hover:bg-emerald-600 text-slate-950 border-transparent shadow-lg shadow-emerald-500/10'
                 }`}
               >
                 {isFriend === 'friends' ? <UserMinus size={14} /> : <UserPlus size={14} />}
-                {isFriend === 'friends' ? 'УДАЛИТЬ' : isFriend === 'pending' ? 'ОЖИДАНИЕ' : 'В ДРУЗЬЯ'}
+                {isFriend === 'friends' ? 'УДАЛИТЬ' : 'В ДРУЗЬЯ'}
               </button>
 
               <button 
@@ -190,7 +223,7 @@ export default function UserProfilePage() {
           )}
         </div>
 
-        {/* Уведомления об операциях */}
+        {/* Кастомное всплывающее уведомление */}
         <AnimatePresence>
           {uiFeedback && (
             <motion.div 
@@ -204,37 +237,19 @@ export default function UserProfilePage() {
           )}
         </AnimatePresence>
 
-        {/* 🗂 СИСТЕМА ВКЛАДОК (CHESS.COM STYLE) */}
+        {/* 🗂 СИСТЕМА ВКЛАДОК */}
         <div className="flex border-b border-slate-900/60 gap-6 text-sm font-black uppercase tracking-wider px-2">
-          <button 
-            onClick={() => setActiveTab('overview')} 
-            className={`pb-3 transition-all border-b-2 ${activeTab === 'overview' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
-          >
-            Обзор
-          </button>
-          <button 
-            onClick={() => setActiveTab('matches')} 
-            className={`pb-3 transition-all border-b-2 ${activeTab === 'matches' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
-          >
-            Партии ({matchHistory.length})
-          </button>
-          <button 
-            onClick={() => setActiveTab('friends')} 
-            className={`pb-3 transition-all border-b-2 ${activeTab === 'friends' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}
-          >
-            Друзья ({userFriends.length})
-          </button>
+          <button onClick={() => setActiveTab('overview')} className={`pb-3 transition-all border-b-2 ${activeTab === 'overview' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>Обзор</button>
+          <button onClick={() => setActiveTab('matches')} className={`pb-3 transition-all border-b-2 ${activeTab === 'matches' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>Партии ({matchHistory.length})</button>
+          <button onClick={() => setActiveTab('friends')} className={`pb-3 transition-all border-b-2 ${activeTab === 'friends' ? 'text-white border-emerald-500' : 'text-slate-500 border-transparent hover:text-slate-300'}`}>Друзья ({userFriends.length})</button>
         </div>
 
         {/* 📑 ДИНАМИЧЕСКИЙ КОНТЕНТ ВКЛАДОК */}
         <div className="w-full">
           {activeTab === 'overview' && (
             <div className="space-y-6">
-              
-              {/* СЕТКА СТАТИСТИКИ РЕЖИМОВ (Как на твоем фото) */}
+              {/* Сетка игровых модов */}
               <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
-                
-                {/* Блиц */}
                 <div className="p-5 bg-slate-900/20 border border-slate-900 rounded-2xl flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="text-[10px] text-slate-500 font-black uppercase tracking-wider flex items-center gap-1"><Zap size={11} className="text-amber-500" /> Блиц</div>
@@ -242,8 +257,6 @@ export default function UserProfilePage() {
                   </div>
                   <div className="text-right text-[10px] font-bold text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10 flex items-center gap-0.5">▲ 24</div>
                 </div>
-
-                {/* Пуля */}
                 <div className="p-5 bg-slate-900/20 border border-slate-900 rounded-2xl flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="text-[10px] text-slate-500 font-black uppercase tracking-wider flex items-center gap-1"><Flame size={11} className="text-orange-500" /> Пуля</div>
@@ -251,8 +264,6 @@ export default function UserProfilePage() {
                   </div>
                   <div className="text-right text-[10px] font-bold text-red-400 bg-red-500/5 px-2 py-0.5 rounded border border-red-500/10 flex items-center gap-0.5">▼ 12</div>
                 </div>
-
-                {/* Рапид */}
                 <div className="p-5 bg-slate-900/20 border border-slate-900 rounded-2xl flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="text-[10px] text-slate-500 font-black uppercase tracking-wider flex items-center gap-1"><Clock size={11} className="text-emerald-500" /> Рапид</div>
@@ -260,8 +271,6 @@ export default function UserProfilePage() {
                   </div>
                   <div className="text-right text-[10px] font-bold text-slate-400 bg-slate-800/40 px-2 py-0.5 rounded">0</div>
                 </div>
-
-                {/* Задачи */}
                 <div className="p-5 bg-slate-900/20 border border-slate-900 rounded-2xl flex items-center justify-between">
                   <div className="space-y-1">
                     <div className="text-[10px] text-slate-500 font-black uppercase tracking-wider flex items-center gap-1"><Target size={11} className="text-blue-500" /> Задачи</div>
@@ -269,10 +278,9 @@ export default function UserProfilePage() {
                   </div>
                   <div className="text-right text-[10px] font-bold text-emerald-400 bg-emerald-500/5 px-2 py-0.5 rounded border border-emerald-500/10 flex items-center gap-0.5">▲ 115</div>
                 </div>
-
               </div>
 
-              {/* Сводка и Общая статистика аккаунта */}
+              {/* Общие винрейты */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div className="md:col-span-1 p-6 bg-slate-900/10 border border-slate-900 rounded-2xl space-y-4">
                   <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5"><Award size={14} className="text-amber-500" /> Достижения лиги</h4>
@@ -300,7 +308,6 @@ export default function UserProfilePage() {
                   </div>
                 </div>
               </div>
-
             </div>
           )}
 
@@ -324,29 +331,71 @@ export default function UserProfilePage() {
             </div>
           )}
 
+          {/* 👥 СВЕРХТЕХНОЛОГИЧНЫЙ СПИСОК ДРУЗЕЙ С ПЕРЕХОДОМ В ЧАТ */}
           {activeTab === 'friends' && (
             <div className="bg-slate-900/10 border border-slate-900 rounded-2xl p-6">
               <h4 className="text-xs font-black text-slate-400 uppercase tracking-wider flex items-center gap-1.5 mb-4"><Users size={14} /> Контакты и друзья пользователя</h4>
               {userFriends.length === 0 ? (
-                <p className="text-xs text-slate-500">У данного игрока пока нет связей.</p>
+                <p className="text-xs text-slate-500 py-2">У данного игрока пока нет связей.</p>
               ) : (
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {userFriends.map(f => (
-                    <div key={f.id} className="p-3 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center justify-between">
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <span className={`w-2 h-2 rounded-full ${f.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-700'}`} />
-                        <span className="text-xs font-bold text-slate-200 truncate">{f.username}</span>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  {userFriends.map((friend) => {
+                    const isOwnProfile = currentUser?.uid === friend.id;
+                    return (
+                      <div key={friend.id} className="p-3.5 bg-slate-950/40 border border-slate-900 rounded-xl flex items-center justify-between transition-all hover:border-slate-800/80">
+                        <div className="flex items-center gap-3 min-w-0">
+                          
+                          {/* Фото друга (Base64) + Червячок */}
+                          <div className="w-10 h-10 rounded-xl bg-slate-800 border border-slate-700 overflow-hidden flex items-center justify-center text-slate-300 font-black uppercase text-sm relative shrink-0">
+                            {friend.photoURL ? (
+                              <img src={friend.photoURL} alt={friend.username} className="w-full h-full object-cover" />
+                            ) : (
+                              friend.username?.[0]
+                            )}
+                            <span className={`absolute -bottom-0.5 -right-0.5 w-3 h-3 rounded-full border-2 border-slate-950 ${friend.isOnline ? 'bg-emerald-500 animate-pulse' : 'bg-slate-600'}`} />
+                          </div>
+
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-200 truncate flex items-center gap-1.5">
+                              {friend.username}
+                              {friend.role === 'admin' && (
+                                <span className="text-[8px] bg-red-500/10 text-red-400 px-1 rounded font-black border border-red-500/10">ROOT</span>
+                              )}
+                            </div>
+                            <div className="text-[10px] text-amber-500 font-bold mt-0.5">🏆 {friend.rating || 1200} ELO</div>
+                          </div>
+                        </div>
+
+                        {/* КНОПКИ ВНУТРИ СПИСКА ДРУЗЕЙ */}
+                        <div className="flex items-center gap-2 shrink-0">
+                          {!isOwnProfile && (
+                            <button 
+                              onClick={() => router.push(`/dashboard/user/${friend.id}`)} 
+                              className="px-3 py-1.5 bg-slate-900 border border-slate-800 hover:border-emerald-500/20 text-slate-300 hover:text-emerald-400 font-black text-[10px] uppercase tracking-wider rounded-lg transition-all active:scale-95"
+                            >
+                              Профиль
+                            </button>
+                          )}
+                          
+                          {/* ✉️ КНОПКА ПЕРЕХОДА В ЛИЧНЫЙ ЧАТ С ДРУГОМ */}
+                          {!isOwnProfile && friend.id !== currentUser?.uid && (
+                            <button 
+                              onClick={() => router.push(`/dashboard/messages?chatWith=${friend.id}`)} 
+                              className="p-2 bg-slate-900 border border-slate-800 text-slate-400 hover:text-emerald-400 hover:border-emerald-500/20 rounded-lg transition-all active:scale-95"
+                              title="Открыть чат"
+                            >
+                              <MessageSquare size={13} />
+                            </button>
+                          )}
+                          
+                          {isOwnProfile && (
+                            <span className="text-[9px] text-slate-600 font-black uppercase tracking-wider px-2 py-1 bg-slate-900/50 rounded-lg">Вы</span>
+                          )}
+                        </div>
+
                       </div>
-                      {currentUser?.uid !== f.id && (
-                        <button 
-                          onClick={() => router.push(`/dashboard/user/${f.id}`)} 
-                          className="p-1.5 bg-slate-900 border border-slate-800 rounded-lg text-xs font-bold text-slate-400 hover:text-white transition-colors"
-                        >
-                          Профиль
-                        </button>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
