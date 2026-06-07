@@ -8,7 +8,7 @@ import { Chess } from 'chess.js';
 import {
   Play, BookOpen, Award, Sparkles, BrainCircuit,
   BarChart3, Users, ShieldAlert, Zap, Trophy, HelpCircle,
-  Menu, LogIn, Swords
+  Menu, LogIn, Swords, X
 } from 'lucide-react';
 
 const debuts = [
@@ -44,6 +44,7 @@ const stats = [
 export default function HomePage() {
   const [selectedDebut, setSelectedDebut] = useState(debuts[0]);
   const [gamePreview, setGamePreview] = useState<Chess | null>(null);
+  const [showLoginModal, setShowLoginModal] = useState(false);
 
   useEffect(() => {
     setGamePreview(new Chess(selectedDebut.fen));
@@ -85,10 +86,10 @@ export default function HomePage() {
 
             {/* Навигация */}
             <nav className="hidden md:flex items-center gap-8 text-sm font-semibold text-slate-400">
-              <Link href="/game/new" className="hover:text-white transition-colors">Играть</Link>
-              <Link href="/learn" className="hover:text-white transition-colors">Академия</Link>
-              <Link href="/tournaments" className="hover:text-white transition-colors">Турниры</Link>
-              <Link href="/leaderboard" className="hover:text-white transition-colors">Лидеры</Link>
+              <button onClick={() => setShowLoginModal(true)} className="hover:text-white transition-colors">Играть</button>
+              <button onClick={() => setShowLoginModal(true)} className="hover:text-white transition-colors">Академия</button>
+              <button onClick={() => setShowLoginModal(true)} className="hover:text-white transition-colors">Турниры</button>
+              <button onClick={() => setShowLoginModal(true)} className="hover:text-white transition-colors">Лидеры</button>
             </nav>
 
             {/* Кнопка входа */}
@@ -130,12 +131,12 @@ export default function HomePage() {
             transition={{ delay: 0.2, duration: 0.6 }}
             className="flex flex-col sm:flex-row gap-4 w-full max-w-lg justify-center pt-4"
           >
-            <Link href="/game/new" className="group flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-lg px-8 py-4.5 rounded-2xl shadow-xl shadow-emerald-500/10 transition-all duration-200 hover:translate-y-[-2px]">
+            <button onClick={() => setShowLoginModal(true)} className="group flex items-center justify-center gap-3 bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-lg px-8 py-4.5 rounded-2xl shadow-xl shadow-emerald-500/10 transition-all duration-200 hover:translate-y-[-2px]">
               <Play fill="currentColor" size={18} /> Играть против ИИ
-            </Link>
-            <Link href="/learn" className="flex items-center justify-center gap-3 bg-slate-900/50 hover:bg-slate-800/80 border border-slate-800 text-white font-bold text-lg px-8 py-4.5 rounded-2xl backdrop-blur-md transition-all duration-200 hover:translate-y-[-2px]">
+            </button>
+            <button onClick={() => setShowLoginModal(true)} className="flex items-center justify-center gap-3 bg-slate-900/50 hover:bg-slate-800/80 border border-slate-800 text-white font-bold text-lg px-8 py-4.5 rounded-2xl backdrop-blur-md transition-all duration-200 hover:translate-y-[-2px]">
               <BookOpen size={18} /> Академия дебютов
-            </Link>
+            </button>
           </motion.div>
 
           {/* Статистика */}
@@ -290,6 +291,78 @@ export default function HomePage() {
             </div>
           </div>
         </footer>
+
+        {/* 🔐 МОДАЛКА ВХОДА */}
+        <AnimatePresence>
+          {showLoginModal && (
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setShowLoginModal(false)}
+              className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4"
+            >
+              <motion.div 
+                initial={{ scale: 0.95, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.95, opacity: 0 }}
+                onClick={(e) => e.stopPropagation()}
+                className="bg-slate-900 border border-slate-800 rounded-3xl p-8 max-w-md w-full shadow-2xl relative"
+              >
+                <button 
+                  onClick={() => setShowLoginModal(false)}
+                  className="absolute top-6 right-6 p-2 hover:bg-slate-800 rounded-lg transition-colors text-slate-400 hover:text-white"
+                >
+                  <X size={20} />
+                </button>
+
+                <div className="space-y-6">
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-2">
+                      <Swords className="text-emerald-400" size={24} />
+                      <h2 className="text-2xl font-black tracking-tight">CHESS.PRO</h2>
+                    </div>
+                    <p className="text-slate-400 text-sm">Для доступа к полным функциям платформы требуется авторизация</p>
+                  </div>
+
+                  <div className="p-4 bg-emerald-500/5 border border-emerald-500/20 rounded-xl">
+                    <p className="text-xs text-emerald-400 font-semibold">✨ Преимущества входа:</p>
+                    <ul className="text-xs text-slate-400 mt-2 space-y-1">
+                      <li>• Сохранение истории партий</li>
+                      <li>• Отслеживание рейтинга Elo</li>
+                      <li>• Доступ к аналитике Gemini</li>
+                      <li>• Участие в турнирах</li>
+                    </ul>
+                  </div>
+
+                  <div className="space-y-3">
+                    <Link 
+                      href="/login"
+                      onClick={() => setShowLoginModal(false)}
+                      className="flex items-center justify-center gap-2 w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold py-3 rounded-xl transition-all"
+                    >
+                      <LogIn size={18} /> Войти
+                    </Link>
+                    <Link 
+                      href="/register"
+                      onClick={() => setShowLoginModal(false)}
+                      className="flex items-center justify-center gap-2 w-full bg-slate-800 hover:bg-slate-700 text-white font-bold py-3 rounded-xl transition-all border border-slate-700"
+                    >
+                      <Sparkles size={18} /> Создать аккаунт
+                    </Link>
+                  </div>
+
+                  <button 
+                    onClick={() => setShowLoginModal(false)}
+                    className="w-full text-slate-400 hover:text-slate-300 text-sm font-semibold py-2 transition-colors"
+                  >
+                    Продолжить без авторизации
+                  </button>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
 
       </div>
     </main>
