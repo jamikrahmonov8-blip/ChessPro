@@ -6,8 +6,8 @@ import { auth, db } from '@/utils/firebase';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { doc, onSnapshot, collection, query, where, updateDoc } from 'firebase/firestore';
 import { 
-  Swords, Trophy, LogOut, User, ShieldCheck, 
-  GraduationCap, Settings as SettingsIcon, MessageSquare, Users, Bell, Check, X
+  Swords, Trophy, LogOut, User, Shield, 
+  Settings as SettingsIcon, MessageSquare, Users, Bell, Check, X
 } from 'lucide-react';
 import Link from 'next/link';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -17,6 +17,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   const pathname = usePathname();
   const [userProfile, setUserProfile] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+
+  // Состояние роли админа
+  const [userRole, setUserRole] = useState<string>('user');
 
   // Состояния Realtime Уведомлений
   const [activeInvite, setActiveInvite] = useState<any>(null);
@@ -45,11 +48,18 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
 
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
-        // Подписка на профиль
-        onSnapshot(doc(db, 'profiles', user.uid), (docSnap) => {
-          if (docSnap.exists()) setUserProfile(docSnap.data());
+        // Подписка на профиль + вытягивание роли
+        const unsubscribeProfile = onSnapshot(doc(db, 'profiles', user.uid), (docSnap) => {
+          if (docSnap.exists()) {
+            const data = docSnap.data();
+            setUserProfile(data);
+            setUserRole(data.role || 'user');
+          }
           setLoading(false);
         });
+
+        // 🟢 Мягко ставим статус "В сети" в базе данных
+        updateDoc(doc(db, 'profiles', user.uid), { isOnline: true }).catch(() => {});
 
         // 🔔 СЛУШАТЕЛЬ ВХОДЯЩИХ ИНВАЙТОВ НА ИГРУ
         const invitesQuery = query(
@@ -65,7 +75,10 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
           if (snapshot.empty) setActiveInvite(null);
         });
 
-        return () => unsubscribeInvites();
+        return () => {
+          unsubscribeProfile();
+          unsubscribeInvites();
+        };
       } else {
         router.push('/login');
       }
@@ -131,20 +144,64 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
                 </Link>
               );
             })}
+
+            {/* ⚡ СКРЫТЫЙ ИНТЕРФЕЙС АДМИНИСТРАТОРА (Стиль сохранен целиком) */}
+            {userRole === 'admin' && (
+              <>
+                <div className="h-px bg-slate-800/40 my-4 mx-2" />
+                <Link 
+                  href="/dashboard/admin" 
+                  className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-xs font-bold transition-all border relative overflow-hidden group ${
+                    pathname === '/dashboard/admin' 
+                      ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20 shadow-lg shadow-emerald-500/5' 
+                      : 'border-slate-800/40 bg-slate-950/20 text-slate-400 hover:border-emerald-500/20 hover:text-emerald-400 hover:bg-emerald-500/[0.01]'
+                  }`}
+                >
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 transition-colors ${
+                    pathname === '/dashboard/admin' ? 'bg-emerald-400 animate-pulse' : 'bg-slate-600 group-hover:bg-emerald-400'
+                  }`} />
+                  <Shield size={15} /> 
+                  <span className="tracking-wide uppercase text-[10px] font-black">Панель управления</span>
+                </Link>
+              </>
+            )}
+            
           </nav>
         </div>
 
         {/* Профиль внизу */}
         <div className="pt-4 border-t border-slate-900/60 flex items-center justify-between px-2">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 font-black uppercase text-sm">{userProfile?.username?.[0]}</div>
-            <div className="overflow-hidden w-28">
-              <h4 className="font-bold text-sm text-slate-200 truncate">{userProfile?.username}</h4>
-              <p className="text-[11px] text-amber-400 font-bold flex items-center gap-1 mt-0.5"><Trophy size={10} /> {userProfile?.rating} ELO</p>
-            </div>
-          </div>
-          <button onClick={() => signOut(auth)} className="p-2 text-slate-500 hover:text-red-400 transition-colors"><LogOut size={16} /></button>
-        </div>
+  <Link 
+    href="/dashboard/profile" 
+    className="flex items-center gap-3 group cursor-pointer min-w-0 flex-1 mr-2"
+  >
+    {/* Аватарка, которая подтягивает фото, если оно загружено */}
+    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 group-hover:border-emerald-500/50 flex items-center justify-center text-emerald-400 font-black uppercase text-sm shrink-0 overflow-hidden transition-all">
+      {userProfile?.photoURL ? (
+        <img src={userProfile.photoURL} alt="Avatar" className="w-full h-full object-cover" />
+      ) : (
+        userProfile?.username?.[0]
+      )}
+    </div>
+    
+    <div className="overflow-hidden w-28">
+      <h4 className="font-bold text-sm text-slate-200 truncate group-hover:text-emerald-400 transition-colors">
+        {userProfile?.username}
+      </h4>
+      <p className="text-[11px] text-amber-400 font-bold flex items-center gap-1 mt-0.5">
+        <Trophy size={10} /> {userProfile?.rating || 1200} ELO
+      </p>
+    </div>
+  </Link>
+  
+  {/* Кнопка Логаута */}
+  <button 
+    onClick={() => signOut(auth)} 
+    className="p-2 text-slate-500 hover:text-red-400 transition-colors shrink-0"
+  >
+    <LogOut size={16} />
+  </button>
+</div>
       </aside>
 
       {/* Контент */}
