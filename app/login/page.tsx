@@ -46,6 +46,10 @@ export default function LoginPage() {
     setError(null);
 
     try {
+      if (!auth) {
+        throw new Error('Firebase не инициализирован. Проверьте переменные окружения.');
+      }
+
       // Validate form fields
       if (!formData.email.trim()) {
         throw new Error('Email не может быть пустым');

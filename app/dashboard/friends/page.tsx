@@ -21,10 +21,10 @@ export default function FriendsPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFriend, setSelectedFriend] = useState<any>(null);
 
-  const currentUser = auth.currentUser;
+  const currentUser = auth?.currentUser;
 
   useEffect(() => {
-    if (!currentUser) return;
+    if (!currentUser || !db) return;
 
     // 1. Стрим списка подтвержденных друзей
     const friendsRef = collection(db, 'profiles', currentUser.uid, 'friends');

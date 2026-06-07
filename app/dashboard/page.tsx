@@ -13,6 +13,11 @@ export default function DashboardPage() {
 
   useEffect(() => {
     // Используем текущего авторизованного пользователя из контекста Firebase
+    if (!auth || !db) {
+      router.push('/login');
+      return;
+    }
+
     const user = auth.currentUser;
     if (user) {
       const docRef = doc(db, 'profiles', user.uid);
@@ -21,7 +26,7 @@ export default function DashboardPage() {
       });
       return () => unsubscribe();
     }
-  }, []);
+  }, [router]);
 
   const selectTimeControlAndPlay = (seconds: number) => {
     router.push(`/game?time=${seconds}`);

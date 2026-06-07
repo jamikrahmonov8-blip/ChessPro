@@ -25,6 +25,10 @@ export default function RegisterPage() {
     setError('');
 
     try {
+      if (!auth || !db) {
+        throw new Error('Firebase не инициализирован. Проверьте переменные окружения.');
+      }
+
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
 

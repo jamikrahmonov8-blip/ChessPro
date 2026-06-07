@@ -38,6 +38,11 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   }, [currentVideoIdx]);
 
   useEffect(() => {
+    if (!auth || !db) {
+      router.push('/login');
+      return;
+    }
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         // Подписка на профиль
