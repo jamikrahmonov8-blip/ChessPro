@@ -69,11 +69,16 @@ export default function TrainingPage() {
 
   const isMyTurn = chessRef.current.turn() === playerColor;
 
-  // Функция форматирования шахматных часов (Фикс рантайм-ошибки)
   const formatTime = (s: number) => {
     const mins = Math.floor(s / 60);
     const secs = s % 60;
     return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  // ⚡ ФИКС СДАЧИ: Функция теперь жестко задекларирована на верхнем уровне видимости компонента
+  const confirmResign = () => {
+    setGameResult({ winner: 'b', reason: 'Вы сдались компьютеру', ratingDiff: 0 });
+    setActiveRequest(null);
   };
 
   useEffect(() => {
@@ -373,7 +378,7 @@ export default function TrainingPage() {
               return (
                 <div key={squareName} onClick={() => handleSquareClick(squareName)}
                   className={`relative flex items-center justify-center cursor-pointer transition-colors duration-150 ${
-                    isKingInCheck ? 'bg-red-500/70 animate-pulse' : isSelected ? 'bg-amber-400/60' : isLastMove ? (isDark ? 'bg-[#aaa23a]' : 'bg-[#cdd16f]') : isDark ? theme.dark : theme.light
+                    isKingInCheck ? 'bg-red-600/70 animate-pulse' : isSelected ? 'bg-amber-400/60' : isLastMove ? (isDark ? 'bg-[#aaa23a]' : 'bg-[#cdd16f]') : isDark ? theme.dark : theme.light
                   }`}
                 >
                   {isPossible && <div className={`absolute z-20 rounded-full ${piece ? 'inset-0 border-4 border-black/20' : 'w-[30%] h-[30%] bg-black/20'}`} />}
@@ -387,7 +392,7 @@ export default function TrainingPage() {
         </motion.div>
 
         <div className="flex lg:flex-col gap-3 shrink-0 justify-center">
-          <button onClick={() => setGameResult({ winner: 'b', reason: 'Вы сдались компьютеру', ratingDiff: 0 })} disabled={!!gameResult} className="w-11 h-11 bg-slate-900/50 border border-slate-800/40 text-slate-400 hover:text-red-400 rounded-xl flex items-center justify-center disabled:opacity-30"><Flag size={16} /></button>
+          <button onClick={() => setActiveRequest('resign_confirm')} disabled={!!gameResult} className="w-11 h-11 bg-slate-900/50 border border-slate-800/40 text-slate-400 hover:text-red-400 rounded-xl flex items-center justify-center disabled:opacity-30"><Flag size={16} /></button>
           <button onClick={() => setShowSettings(!showSettings)} className="w-11 h-11 bg-slate-900/50 border border-slate-800/40 text-slate-400 hover:text-emerald-400 rounded-xl flex items-center justify-center"><Settings size={16} /></button>
         </div>
       </div>

@@ -19,7 +19,7 @@ const BOARD_THEMES = {
 export default function DashboardPage() {
   const router = useRouter();
   const [userProfile, setUserProfile] = useState<any>(null);
-  const [dummyGame] = useState(() => new Chess()); // Стабильное превью доски
+  const [dummyGame] = useState(() => new Chess()); // Движок для начальной позиции
   const [activeSubTab, setActiveSubTab] = useState<'new' | 'history' | 'players'>('new');
   const [selectedTime, setSelectedTime] = useState({ name: '10 мин. (Рапид)', secs: 600 });
   const [showDropdown, setShowDropdown] = useState(false);
@@ -29,7 +29,6 @@ export default function DashboardPage() {
 
   const currentUser = auth.currentUser;
 
-  // Имитация пинга для дизайна
   useEffect(() => {
     const interval = setInterval(() => {
       setPing(Math.floor(Math.random() * 6) + 10);
@@ -37,7 +36,6 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, []);
 
-  // 1. Подгрузка профиля пользователя
   useEffect(() => {
     if (!auth || !db) {
       router.push('/login');
@@ -53,7 +51,6 @@ export default function DashboardPage() {
     }
   }, [router, currentUser]);
 
-  // 2. Подгрузка истории партий
   useEffect(() => {
     if (activeSubTab !== 'history' || !currentUser) return;
     
@@ -118,7 +115,6 @@ export default function DashboardPage() {
     fetchHistory();
   }, [activeSubTab, currentUser]);
 
-  // ⚡ ПОДБОР СЕТЕВОЙ ИГРЫ
   const handleStartGame = async () => {
     if (!currentUser) return;
 
@@ -167,12 +163,13 @@ export default function DashboardPage() {
     { name: '10 мин. (Рапид)', secs: 600 },
   ];
 
+  const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+
   return (
     <main className="p-6 max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-12 gap-6 relative z-10 items-center min-h-[calc(100vh-80px)] w-full font-sans select-none">
       
-      {/* 🧩 ЛЕВАЯ СТОРОНА: Шахматное поле и Профили */}
+      {/* 🧩 ЛЕВАЯ СТОРОНА: Чистая CSS-доска-превью (Защищена от ошибок типов TypeScript) */}
       <div className="lg:col-span-7 flex flex-col items-center gap-2 w-full max-w-[490px] mx-auto">
-        {/* Верхняя панель (Противник) */}
         <div className="w-full flex items-center justify-between px-1 text-slate-400">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-slate-900 border border-slate-800 rounded flex items-center justify-center font-bold text-xs">🤖</div>
@@ -181,8 +178,8 @@ export default function DashboardPage() {
           <div className="bg-slate-900/60 border border-slate-800/40 font-mono font-bold text-xs px-2.5 py-1 rounded text-slate-400">10:00</div>
         </div>
 
-        {/* ♟️ Интерактивная доска-превью */}
-        <div className="bg-slate-950 border border-slate-900 shadow-2xl rounded-2xl overflow-hidden w-full aspect-square grid grid-cols-8 grid-rows-8 p-1 gap-px">
+        {/* Сборка доски на чистых дивах без использования react-chessboard */}
+        <div className="bg-slate-950 border border-slate-800/40 shadow-2xl rounded-2xl overflow-hidden w-full aspect-square grid grid-cols-8 grid-rows-8 p-1 gap-px">
           {Array.from({ length: 8 }, (_, r) => {
             const rowIndex = 7 - r;
             return Array.from({ length: 8 }, (_, f) => {
@@ -204,7 +201,6 @@ export default function DashboardPage() {
           })}
         </div>
 
-        {/* Нижняя панель (Вы) */}
         <div className="w-full flex items-center justify-between px-1 text-slate-400">
           <div className="flex items-center gap-2">
             <div className="w-7 h-7 bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 rounded flex items-center justify-center font-black text-[10px] uppercase">{userProfile?.username?.[0] || 'U'}</div>
@@ -215,11 +211,10 @@ export default function DashboardPage() {
         </div>
       </div>
 
-      {/* ⚡ ПРАВАЯ СТОРОНА: Меню запуска игровых режимов */}
+      {/* ⚡ ПРАВАЯ СТОРОНА: Консоль запуска режимов */}
       <div className="lg:col-span-5 bg-slate-900/20 border border-slate-900/60 rounded-3xl p-6 backdrop-blur-xl shadow-2xl h-[490px] flex flex-col justify-between w-full mx-auto overflow-hidden">
         <div className="space-y-6 h-full flex flex-col">
           
-          {/* Навигация подвкладок */}
           <div className="grid grid-cols-3 border-b border-slate-900/80 text-center text-xs font-black uppercase tracking-wider pb-1 shrink-0">
             <button onClick={() => setActiveSubTab('new')} className={`pb-2.5 flex items-center justify-center gap-1 transition-all ${activeSubTab === 'new' ? 'text-white border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}><PlusSquare size={13} /> Режимы</button>
             <button onClick={() => setActiveSubTab('history')} className={`pb-2.5 flex items-center justify-center gap-1 transition-all ${activeSubTab === 'history' ? 'text-white border-b-2 border-emerald-500' : 'text-slate-500 hover:text-slate-300'}`}><History size={13} /> Истории</button>
@@ -229,11 +224,8 @@ export default function DashboardPage() {
           <div className="flex-1 overflow-y-auto pr-1">
             <AnimatePresence mode="wait">
               
-              {/* ВКЛАДКА 1: КНОПКИ ПРЯМОГО ЗАПУСКА */}
               {activeSubTab === 'new' && (
                 <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} className="space-y-4 pt-1">
-                  
-                  {/* Селектор времени */}
                   <div className="relative">
                     <button 
                       onClick={() => setShowDropdown(!showDropdown)}
@@ -261,7 +253,6 @@ export default function DashboardPage() {
                     )}
                   </div>
 
-                  {/* КНОПКА ПО СЕТИ */}
                   <button 
                     onClick={handleStartGame}
                     className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 text-xs font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-wider active:scale-[0.99]"
@@ -269,50 +260,31 @@ export default function DashboardPage() {
                     <Users size={15} /> Играть по сети
                   </button>
 
-                  {/* КНОПКА С БОТОМ */}
                   <button 
                     onClick={() => router.push('/dashboard/training')}
                     className="w-full bg-slate-950 border border-slate-800 hover:border-amber-500/40 text-white text-xs font-black py-4 rounded-2xl transition-all flex items-center justify-center gap-2 uppercase tracking-wider active:scale-[0.99]"
                   >
                     <BrainCircuit size={15} className="text-amber-400" /> Одиночная тренировка
                   </button>
-
-                  <div className="p-3 bg-slate-950/40 border border-slate-900/60 rounded-xl flex items-center gap-3 opacity-30 cursor-not-allowed text-[10px] font-bold text-slate-500 uppercase"><Settings size={13} /> Кастомные турниры арены</div>
                 </motion.div>
               )}
 
-              {/* ВКЛАДКА 2: ИСТОРИЯ ПАРТИЙ С ДЕЛЬТОЙ ELO */}
               {activeSubTab === 'history' && (
                 <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} className="space-y-2 pt-1">
                   {historyLoading && <div className="text-center text-xs text-slate-500 py-12 animate-pulse font-mono">Сканирование логов...</div>}
-                  
-                  {!historyLoading && matchHistory.length === 0 && (
-                    <p className="text-xs text-slate-500 text-center py-16 font-medium">Вы еще не сыграли ни одной рейтинговой партии.</p>
-                  )}
-
+                  {!historyLoading && matchHistory.length === 0 && <p className="text-xs text-slate-500 text-center py-16 font-medium">Вы еще не сыграли ни одной парти.</p>}
                   {!historyLoading && matchHistory.map((match) => (
                     <div key={match.id} className="p-3 bg-slate-950/60 border border-slate-900 rounded-xl flex items-center justify-between gap-4">
                       <div className="flex items-center gap-3 min-w-0">
-                        <div 
-                          onClick={() => match.opponentId && router.push(`/dashboard/user/${match.opponentId}`)}
-                          className={`w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-black uppercase text-slate-300 shrink-0 ${match.opponentId ? 'cursor-pointer hover:border-emerald-500/40' : ''}`}
-                        >
-                          {match.opponentName?.[0]}
-                        </div>
+                        <div onClick={() => match.opponentId && router.push(`/dashboard/user/${match.opponentId}`)} className={`w-8 h-8 rounded-lg bg-slate-900 border border-slate-800 flex items-center justify-center text-xs font-black uppercase text-slate-300 shrink-0 ${match.opponentId ? 'cursor-pointer hover:border-emerald-500/40' : ''}`}>{match.opponentName?.[0]}</div>
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
-                            <h4 
-                              onClick={() => match.opponentId && router.push(`/dashboard/user/${match.opponentId}`)}
-                              className={`text-xs font-black text-white truncate ${match.opponentId ? 'cursor-pointer hover:text-emerald-400 transition-colors' : ''}`}
-                            >
-                              {match.opponentName}
-                            </h4>
+                            <h4 onClick={() => match.opponentId && router.push(`/dashboard/user/${match.opponentId}`)} className={`text-xs font-black text-white truncate ${match.opponentId ? 'cursor-pointer hover:text-emerald-400 transition-colors' : ''}`}>{match.opponentName}</h4>
                             {match.opponentId && <ArrowUpRight size={10} className="text-slate-600 shrink-0" />}
                           </div>
                           <p className="text-[9px] text-slate-500 font-bold mt-0.5 uppercase tracking-wide">{match.reason} • {match.createdAt}</p>
                         </div>
                       </div>
-
                       <div className="text-right shrink-0">
                         <span className="text-[10px] font-black uppercase block">{match.resultText.split(' ')[0]}</span>
                         <span className={`text-[10px] font-mono font-bold block mt-0.5 ${match.eloColor}`}>{match.eloText}</span>
@@ -322,19 +294,17 @@ export default function DashboardPage() {
                 </motion.div>
               )}
 
-              {/* ВКЛАДКА 3: ШАХМАТИСТЫ */}
               {activeSubTab === 'players' && (
                 <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: 4 }} className="p-8 bg-slate-950/30 border border-slate-900/60 rounded-2xl text-center space-y-3 pt-12">
                   <Users size={20} className="mx-auto text-slate-600" />
-                  <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">Для поиска гроссмейстеров и работы со списками контактов перейдите в левое боковое меню.</p>
-                  <button onClick={() => router.push('/dashboard/search')} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 border border-slate-800 text-slate-300 font-black text-[10px] uppercase tracking-wider rounded-xl transition-all">Открыть поиск</button>
+                  <p className="text-xs text-slate-500 leading-relaxed max-w-xs mx-auto">Для поиска гроссмейстеров перейдите в левое боковое меню.</p>
+                  <button onClick={() => router.push('/dashboard/search')} className="px-4 py-2 bg-slate-900 border border-slate-800 text-slate-300 font-black text-[10px] uppercase rounded-xl">Открыть поиск</button>
                 </motion.div>
               )}
 
             </AnimatePresence>
           </div>
 
-          {/* Панель статуса системы */}
           <div className="flex items-center justify-between border-t border-slate-900/80 pt-4 text-[9px] text-slate-500 font-mono shrink-0">
             <span>CHESS.PRO SYSTEM ENGINE</span>
             <div className="flex items-center gap-1 text-emerald-400/80 font-bold"><Wifi size={10} /> {ping} ms SECURED</div>
